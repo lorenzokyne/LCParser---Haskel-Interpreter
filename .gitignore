@@ -42,7 +42,7 @@ testem.log
 /typings
 src/testing-ignore/file.ts
 src/testing-ignore/ciao.txt
-src/environments/environment.ts
+src/environment/environment.ts
 
 # System Files
 .DS_Store
