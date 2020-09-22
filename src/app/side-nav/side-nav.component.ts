@@ -19,8 +19,15 @@ export class SideNavComponent {
     this.initNav();
   }
 
-
-
+  doSomething(inputobj) {
+    inputobj.obj.isFavourite = !inputobj.obj.isFavourite;
+    if (inputobj.obj.isFavourite) {
+      this.selectedItems.push(inputobj)
+    } else {
+      this.selectedItems.splice(this.selectedItems.indexOf(inputobj), 1);
+    }
+  }
+  selectedItems = [];
   fillerNav = Array.from({ length: Math.floor(Math.random() * 10) + 1 }, (_, i) => new navComp("Nav component " + i));
 
 
@@ -36,14 +43,14 @@ export class SideNavComponent {
 class navComp {
   public obj;
 
-  constructor(@Inject(String)label: string) {
-    
+  constructor(@Inject(String) label: string) {
+
     this.obj = {
-      "label": label
-      
+      "label": label,
+      "isFavourite": false
     }
-    this.obj.array= Array.from({ length: Math.floor(Math.random() * 6) + 1   }, (_, i) => this.obj.label + " child " + (i+1))
+    this.obj.array = Array.from({ length: Math.floor(Math.random() * 6) + 1 }, (_, i) => this.obj.label + " child " + (i + 1))
   }
-  
+
 }
 
