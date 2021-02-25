@@ -1,113 +1,142 @@
+{-# OPTIONS_GHC -Wno-missing-methods #-}
 module Lorenzo(
-    
+    module Lorenzo
 ) where
-    import Control.Applicative
-    import Data.Char(isSpace)
-    a :: Float
-    a = 5
+        import Control.Applicative
+        import Data.Char(isSpace)
+        a :: Float
+        a = 5 
+        
+        newtype Parser a = P( String -> [(a,String)])
 
-    x :: String
-    x = "Ciao"
-    bind :: (Float -> (Float,String)) -> ((Float,String) -> (Float,String))
-    bind f' (gx,gs) = let (fx,fs) = f' gx in (fx,gs++fs)
-    
-    --------PARSER -----------
-    type Parser a = String -> [(a,String)]
-    item :: Parser Char
-    item  = \inp -> case inp of
-                  []     -> []
-                  (x:xs) -> [(x,xs)]
+        {-# LANGUAGE FlexibleInstances #-}
+        instance Functor Parser where
+        fmap :: (a -> b) -> Parser a -> Parser b
+        fmap g p = P(\inp -> case parse p inp of
+                                []        -> []
+                                [(v,out)] -> [(g v, out)])  
+        instance Applicative Parser where
+        -- pure :: a -> Parser a
+        pure v = P (\inp -> [(v,inp)])
 
-    failure :: Parser a
-    failure  = \inp -> []
+        -- <*> :: Parser (a -> b) -> Parser a -> Parser b
+        pg <*> px = P (\inp -> case parse pg inp of
+                                []        -> []
+                                [(g,out)] -> parse (Lorenzo.fmap g px) out)
+        instance Monad Parser where
+                --(>>=) :: Parser a -> (a -> Parser b) -> Parser b
+                p >>= f = P (\inp -> case parse p inp of
+                                        []        -> []
+                                        [(v,out)] -> parse (f v) out)
+        instance Alternative Parser where
+                --empty :: Parser a
+                empty = P (\inp -> [])
 
-    return  :: a -> Parser a
-    return v = \inp -> [(v,inp)]
+                --(<|>) :: Parser a -> Parser a -> Parser a
+                p <|> q = P (\inp -> case parse p inp of
+                                []        -> parse q inp
+                                [(v,out)] -> [(v,out)])
 
-    (+++)  :: Parser a -> Parser a -> Parser a
-    p +++ q = \inp -> case p inp of
-                   []        -> parse q inp
-                   [(v,out)] -> [(v,out)]
+        bind :: (Float -> (Float,String)) -> ((Float,String) -> (Float,String))
+        bind f' (gx,gs) = let (fx,fs) = f' gx in (fx,gs++fs)
+        
+        --------PARSER -----------
+        
+        item :: Parser Char
+        item  = P(\inp -> case inp of
+                        []     -> []
+                        (x:xs) -> [(x,xs)])
 
-    parse :: Parser a -> String -> [(a,String)]
-    parse p inp = p inp               
+        failure :: Parser a
+        failure  = P(\inp -> [])
 
-    -- sequencing
-    (>>=) :: Parser a -> (a -> Parser b) -> Parser b
-    p >>= f = \inp -> case (parse p inp) of
-        [] -> []
-        [(v,out)] -> parse (f v) out
-    -- p :: Parser (Char,Char)
-    -- p  = do x <- item
-    --         ;y <- item
-    --         ;Prelude.return (x,y)
-    sat  :: (Char -> Bool) -> Parser Char
-    sat p = item Lorenzo.>>= \x -> if p x then Lorenzo.return x else failure
+        -- return  :: a -> Parser a
+        -- return v = P(\inp -> [(v,inp)])
 
-    isDigit :: Char -> Bool
-    isDigit c = c >= '0' && c <= '9'
-    
-    digit :: Parser Char
-    digit  = sat isDigit
+        --     (+++)  :: Parser a -> Parser a -> Parser a
+        --     p1 +++ q1 = P(\inp -> case p1 inp) of
+        --                    []        -> parse q1 inp
+        --                    [(v,out)] -> [(v,out)])
 
-    char  :: Char -> Parser Char
-    char x = sat (x ==)
-    --uasge parse (char 'x') "cdxiao"
-    
-    nat :: Parser Int
-    nat = do{
-            xs <- some digit 
-            ;Lorenzo.return (read xs)
-            }  
-    
-    many2  :: Parser a -> Parser [a]
-    many2 p = many1 p Lorenzo.+++ Lorenzo.return []
+        parse :: Parser a -> String -> [(a,String)]
+        parse (P p) inp = p inp             
 
-    many1  :: Parser a -> Parser [a]
-    many1 p = p Lorenzo.>>= \x -> many2 p Lorenzo.>>= \vs -> Lorenzo.return (x:vs)
+        -- sequencing
+        --     (>>=) :: Parser a -> (a -> Parser b) -> Parser b
+        --     p >>= f = \inp -> case (parse p inp) of
+        --         [] -> []
+        --         [(v,out)] -> parse (f v) out
+        -- p :: Parser (Char,Char)
+        -- p  = do x <- item
+        --         ;y <- item
+        --         ;Prelude.return (x,y)
+        sat  :: (Char -> Bool) -> Parser Char
+        sat p = item >>= \x -> if p x then return x else failure
 
-    string :: String -> Parser String
-    string []     = Lorenzo.return []
-    string (x:xs) = char x Lorenzo.>>= \y -> string xs Lorenzo.>>= \ys -> Lorenzo.return (y:ys)
-    --usage parse (string "xcd") "xcdxiao"  
+        isDigit :: Char -> Bool
+        isDigit c = c >= '0' && c <= '9'
+        
+        digit :: Parser Char
+        digit  = sat isDigit
 
-    xxx :: Parser Char
-    xxx = char '.' Lorenzo.>>= \c -> digit Lorenzo.>>= \d -> Lorenzo.return d
-    
-    p :: Parser String
-    p  = char '[' Lorenzo.>>= \x -> digit Lorenzo.>>= \d -> many2 xxx Lorenzo.>>= \ds -> char ']' Lorenzo.>>= \y -> Lorenzo.return (d:ds)
-    
-    space :: Parser ()
-    space = many2 (sat isSpace) Lorenzo.>>= \x -> Lorenzo.return ()
+        char  :: Char -> Parser Char
+        char x = sat (x ==)
+        --uasge parse (char 'x') "cdxiao"
+        nat :: Parser Int
+        nat = some digit >>= \xs -> return (read xs)
+        
+        --     many2  :: Parser a -> Parser [a]
+        --     many2 p = many1 p Lorenzo.+++ return []
 
-    token :: Parser a -> Parser a
-    token p = space Lorenzo.>>= \x -> p Lorenzo.>>= \v -> space Lorenzo.>>= \s -> Lorenzo.return v
-            --  v <- p
-            --  space
-            --  return v
+        --     many1  :: Parser a -> Parser [a]
+        --     many1 p = p >>= \x -> many2 p >>= \vs -> return (x:vs)
 
-    symbol :: String -> Parser String
-    symbol xs = token (string xs)
+        string :: String -> Parser String
+        string []     = return []
+        string (x:xs) = char x >>= \y -> string xs >>= \ys -> return (y:ys)
+        --usage parse (string "xcd") "xcdxiao"  
 
-    factor :: Parser Int
-    factor = symbol "(" Lorenzo.>>= \x -> expr Lorenzo.>>= \e -> symbol ")" Lorenzo.>>= \y -> Lorenzo.return e 
-            --     e <- expr
-            --     symbol ")"
-            --     return e
-            -- <|> natural
+        xxx :: Parser Char
+        xxx = char '.' >>= \c -> digit >>= \d -> return d
+        
+        --     p :: Parser String
+        --     p  = char '[' >>= \x -> digit >>= \d -> many xxx >>= \ds -> char ']' >>= \y -> return (d:ds)
+        
+        space :: Parser ()
+        space = many (sat isSpace) >>= \x -> return ()
 
-    expr :: Parser Int
-    expr = term Lorenzo.>>= \t -> (char '+' Lorenzo.>>= \x -> expr Lorenzo.>>= \e -> Lorenzo.return (t + e)) +++ Lorenzo.return 5
+        token :: Parser a -> Parser a
+        token p = space >>= \x -> p >>= \v -> space >>= \s -> return v
+                --  v <- p
+                --  space
+                --  return v
 
-    term :: Parser Int
-    term  = factor Lorenzo.>>= \f -> (char '*' Lorenzo.>>= \x -> term Lorenzo.>>= \t -> Lorenzo.return (f*t)) +++ Lorenzo.return f
-            -- do char '*'
-            --     t  term
-            --     return (f * t)
-            --     +++ return f 
+        symbol :: String -> Parser String
+        symbol xs = token (string xs)
 
-    eval   :: String -> Int
-    eval xs = fst (head (parse expr xs))
+        factor :: Parser Int
+        factor = symbol "(" >>= \x -> (expr >>= \e -> symbol ")" >>= \y -> return e) <|> nat
+                --     e <- expr
+                --     symbol ")"
+                --     return e
+                -- <|> natural
 
-    test :: Parser Int 
-    test = char '1' Lorenzo.>>= \c -> Lorenzo.return (read [c])
+        expr :: Parser Int
+        expr = term >>= \t -> 
+                        do {
+                                symbol "+"
+                                ;e <- expr
+                                ;return (t + e)
+                        }
+                <|> return t
+
+        term :: Parser Int
+        --term  = factor >>= \f -> (char '*' >>= \x -> term >>= \t -> return (f*t)) <|> return f
+        term = factor >>= \f -> (char '*' >>= \c -> term >>= \t -> return (f * t)) <|> return f 
+
+        eval   :: String -> Int
+        eval xs = fst (head (parse expr xs))
+
+        test :: Parser Int 
+        test = char '1' >>= \c -> return (read [c])
+
