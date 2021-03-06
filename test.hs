@@ -139,4 +139,3 @@ module Lorenzo(
 
         test :: Parser Int 
         test = char '1' >>= \c -> return (read [c])
-
