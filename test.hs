@@ -137,7 +137,7 @@ module Lorenzo(
                         symbol "="
                         b <- bexpr
                         updateEnv id "booleano" (show b)
-                        return (show b)
+                        return ""
 
         --     many2  :: Parser a -> Parser [a]
         --     many2 p = many1 p Lorenzo.+++ return []
@@ -182,30 +182,53 @@ module Lorenzo(
                                 symbol ")"
                                 return e
 
-        booleans :: Parser Bool
-        booleans =do 
+        bexpr :: Parser Bool
+        bexpr =do 
                 symbol "True"
                 return True 
                 <|>
                 do
                 symbol "False"
                 return False
+                <|>
+                do
+                        symbol "("
+                        b <-bexprAND
+                        symbol ")"
+                        return b
 
-
-        bexpr :: Parser Bool 
-        bexpr = do
-                        b1 <- booleans
+        bexprAND :: Parser Bool
+        bexprAND =do
+                        b1 <- bexpr
                         symbol "AND"
-                        b2 <- booleans
+                        b2 <- bexprOR
                         return (b1 && b2)
                         <|>
-                        do
-                        b1 <- booleans
+                        bexprOR
+
+        bexprOR :: Parser Bool
+        bexprOR =do
+                        b1 <- bexpr
                         symbol "OR"
-                        b2 <- booleans
+                        b2 <- bexprAND
                         return (b1 || b2)
                         <|>
-                        do booleans
+                        bexpr
+
+        -- bexpr :: Parser Bool 
+        -- bexpr = do
+        --                 b1 <- booleans
+        --                 symbol "AND"
+        --                 b2 <- booleans
+        --                 return (b1 && b2)
+        --                 <|>
+        --                 do
+        --                 b1 <- booleans
+        --                 symbol "OR"
+        --                 b2 <- booleans
+        --                 return (b1 || b2)
+        --                 <|>
+        --                 do booleans
 
         expr :: Parser Int
         expr = do
@@ -228,6 +251,17 @@ module Lorenzo(
                         <|> do
                                 symbol "/" >>= \c -> term >>= \t -> return (f `div`  t)
                                 <|> return f
+
+        ifThenElse :: Parser String
+        ifThenElse = do
+                        symbol "if"
+                        condition <- bexprAND
+                        symbol "then"
+                        if condition then do a<- assignment;return a else do
+                                a<-assignment
+                                symbol "else"
+                                b<-assignment
+                                return b
 
         -- eval   :: String -> Int
         -- eval xs = fst (head (parse expr xs))
