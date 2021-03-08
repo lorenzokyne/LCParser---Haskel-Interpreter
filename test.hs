@@ -13,29 +13,40 @@ module Lorenzo(
         --Variable name
         --Variable type
         --Variable value
+
+        boolType = "Boolean"
+        intType = "Integer"
         type Environment = [(Char, String, String)]
 
         getName :: (Char, String, String) -> Char
         getName (name,_,_) = name
 
-        getType :: (String, String, String) -> String
+        getType :: (Char, String, String) -> String
         getType (_,vartype,_) = vartype
 
-        getValue :: (String, String, String) -> String
+        getValue :: (Char, String, String) -> String
         getValue (_,_,value) = value
 
         updateEnv :: Char -> String -> String -> Parser String
         updateEnv varName varType varValue = 
                  P(\env inp -> case inp of
-                        xs -> [((modifyEnv env varName varType varValue),"",xs)])
+                        xs -> [(modifyEnv env varName varType varValue,"",xs)])
 
         modifyEnv :: Environment -> Char -> String -> String -> Environment
         modifyEnv [] varName varType varValue = [(varName,varType,varValue)]
-        modifyEnv xs varName varType varValue = if (getName (head xs)) == varName
+        modifyEnv xs varName varType varValue = if getName (head xs) == varName
                                                         then [(varName,varType,varValue)] ++ tail xs
                                                     else [head xs] ++ modifyEnv xs varName varType varValue
         
-        
+        --get the value of a named var in the environment
+        getVariable :: Char -> Parser String
+        getVariable varname = P(\env inp -> [(env,snd (getVariable2 env varname),fst(getVariable2 env varname))])
+
+
+        getVariable2 :: Environment -> Char -> (String,String)
+        getVariable2 [] _ = ("","")
+        getVariable2 env varname =  if getName (head env) == varname then (getType (head env),getValue (head env)) else getVariable2 (tail env) varname  
+
         instance Functor Parser where
                 -- fmap :: (a -> b) -> Parser a -> Parser b
                 fmap g p = P(\env inp -> case parse p env inp of
@@ -130,14 +141,16 @@ module Lorenzo(
                 symbol "="
                 e <- expr
                 updateEnv id "intero" (show e)
+                symbol ";"
                 return (show e)
                 <|>
                 do
                         id <- identifier
                         symbol "="
-                        b <- bexpr
+                        b <- bexprAND
                         updateEnv id "booleano" (show b)
-                        return ""
+                        symbol ";"
+                        return (show b)
 
         --     many2  :: Parser a -> Parser [a]
         --     many2 p = many1 p Lorenzo.+++ return []
@@ -183,7 +196,7 @@ module Lorenzo(
                                 return e
 
         bexpr :: Parser Bool
-        bexpr =do 
+        bexpr = do 
                 symbol "True"
                 return True 
                 <|>
@@ -196,12 +209,19 @@ module Lorenzo(
                         b <-bexprAND
                         symbol ")"
                         return b
+                        <|>
+                                do
+                                space
+                                id <- identifier
+                                space
+                                value <- getVariable id
+                                if value == "True" then return True else return False
 
         bexprAND :: Parser Bool
         bexprAND =do
-                        b1 <- bexpr
+                        b1 <- bexprOR
                         symbol "AND"
-                        b2 <- bexprOR
+                        b2 <- bexprAND
                         return (b1 && b2)
                         <|>
                         bexprOR
@@ -210,7 +230,7 @@ module Lorenzo(
         bexprOR =do
                         b1 <- bexpr
                         symbol "OR"
-                        b2 <- bexprAND
+                        b2 <- bexprOR
                         return (b1 || b2)
                         <|>
                         bexpr
@@ -251,20 +271,163 @@ module Lorenzo(
                         <|> do
                                 symbol "/" >>= \c -> term >>= \t -> return (f `div`  t)
                                 <|> return f
+        cmd = assignment
+                <|>
+                ifThenElse
+
+        program :: Parser String
+        program = do
+                cmd
+                ;program
+                <|>
+                cmd
 
         ifThenElse :: Parser String
         ifThenElse = do
                         symbol "if"
                         condition <- bexprAND
                         symbol "then"
-                        if condition then do a<- assignment;return a else do
-                                a<-assignment
+                        if condition then do 
+                                a<-program
                                 symbol "else"
-                                b<-assignment
-                                return b
+                                b<-parseProgram
+                                symbol ";"
+                                return a else 
+                                        do
+                                        a<-parseProgram
+                                        symbol "else"
+                                        b<-program
+                                        symbol ";"
+                                        return b
+
+        -- while :: Parser String
+        -- while = do 
+        --         symbol "while"
+        --         condition <- bexprAND
+        --         if condition then do
+        --                 assignment
+        --                 while
+        --                 else return ""
 
         -- eval   :: String -> Int
         -- eval xs = fst (head (parse expr xs))
+
+        --------------------
+        --PARSE-------------
+        --------------------
+        parseNat :: Parser String
+        parseNat = some digit >>= \xs -> return xs
+
+        parseInt :: Parser String
+        parseInt = parseNat <|> do
+                symbol "-"
+                ;n <- parseNat
+                ;return ("-"++n)
+
+        parseFactor :: Parser String
+        parseFactor = 
+                do
+                                d <- parseInt
+                                return d
+                                <|>
+                                do
+                                        symbol "("
+                                        e <- parseExpr
+                                        symbol ")"
+                                        return e
+        parseTerm :: Parser String
+        parseTerm = do
+                        parseFactor >>= \f ->
+                                do
+                                symbol "*" >>= \c -> parseTerm >>= \t -> return (f ++ "*" ++ t)
+                                <|> do
+                                        symbol "/" >>= \c -> parseTerm >>= \t -> return (f ++ "/" ++  t)
+                                        <|> return f
+
+        parseExpr :: Parser String
+        parseExpr =do
+                t <- parseTerm
+                do
+                        symbol "+"
+                        ;e <- parseExpr
+                        ;return (t ++ "+" ++ e)
+                        <|> do
+                                symbol "-"
+                                ;e <- parseExpr
+                                ;return (t ++ "-" ++ e)
+                                <|> return t
+                                
+        parseBexprAND :: Parser String
+        parseBexprAND = do
+                        b1 <- parseBexprOR
+                        symbol "OR"
+                        b2 <- parseBexprAND
+                        return (b1 ++ "OR" ++ b2)
+                        <|>
+                        parseBexprOR
+
+        parseBexprOR :: Parser String
+        parseBexprOR = do
+                        b1 <- parseBexpr
+                        symbol "AND"
+                        b2 <- parseBexprOR
+                        return (b1 ++ "AND" ++ b2)
+                        <|>
+                        parseBexpr
+        
+        parseBexpr :: Parser String
+        parseBexpr = do 
+                symbol "True"
+                return "True"
+                <|>
+                do
+                symbol "False"
+                return "False"
+                <|>
+                do
+                        symbol "("
+                        b <-parseBexprAND
+                        symbol ")"
+                        return ("(" ++ b ++ ")")
+                        <|>
+                                do
+                                id <- identifier
+                                return [id]
+
+        parseAssignment :: Parser String
+        parseAssignment = do
+                id <- identifier
+                symbol "="
+                e <- parseExpr
+                symbol ";"
+                return ([id] ++ "=" ++ e ++ ";")
+                <|>
+                do
+                        id <- identifier
+                        symbol "="
+                        b <- parseBexprAND
+                        updateEnv id "booleano" (show b)
+                        return ([id] ++ "=" ++ b ++ ";")
+        
+        parseIfThenElse :: Parser String            
+        parseIfThenElse = do
+                symbol "if"
+                condition <- parseBexprAND
+                symbol "then"
+                a <- parseProgram
+                symbol "else"
+                b <- parseProgram
+                symbol ";"
+                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++";")
+
+        parseProgram :: Parser String
+        parseProgram = do
+                parseAssignment
+                <|>
+                parseIfThenElse
+        
+        
+----------------------------------------------------------
 
         test :: Parser Int
         test = char '1' >>= \c -> return (read [c])
