@@ -36,11 +36,11 @@ module Lorenzo(
         modifyEnv [] varName varType varValue = [(varName,varType,varValue)]
         modifyEnv xs varName varType varValue = if getName (head xs) == varName
                                                         then [(varName,varType,varValue)] ++ tail xs
-                                                    else [head xs] ++ modifyEnv xs varName varType varValue
+                                                    else [head xs] ++ modifyEnv (tail xs) varName varType varValue
         
         --get the value of a named var in the environment
         getVariable :: Char -> Parser String
-        getVariable varname = P(\env inp -> [(env,snd (getVariable2 env varname),fst(getVariable2 env varname))])
+        getVariable varname = P(\env inp -> [(env,snd (getVariable2 env varname),inp)])
 
 
         getVariable2 :: Environment -> Char -> (String,String)
@@ -277,8 +277,8 @@ module Lorenzo(
 
         program :: Parser String
         program = do
-                cmd
-                ;program
+                cmd;
+                program
                 <|>
                 cmd
 
@@ -291,15 +291,21 @@ module Lorenzo(
                                 a<-program
                                 symbol "else"
                                 b<-parseProgram
-                                symbol ";"
-                                return a else 
-                                        do
-                                        a<-parseProgram
-                                        symbol "else"
-                                        b<-program
-                                        symbol ";"
-                                        return b
+                                return a 
+                        else 
+                                do
+                                a<-parseProgram
+                                symbol "else"
+                                b<-program
+                                return b
 
+        --temp = do symbol "if"; condition <- bexprAND; return condition
+
+        --temp = do symbol "if"; condition <- bexprAND; symbol "then";return condition
+        temp = do symbol "if"; condition <- bexprAND; symbol "then";a<-assignment;return condition
+        parseTemp = do symbol "if";condition <- parseBexprAND; symbol "then";a<-assignment;return (condition++a);
+        
+        -- temp = do symbol "if"; condition <- bexprAND; return condition
         -- while :: Parser String
         -- while = do 
         --         symbol "while"
@@ -417,8 +423,7 @@ module Lorenzo(
                 a <- parseProgram
                 symbol "else"
                 b <- parseProgram
-                symbol ";"
-                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++";")
+                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b)
 
         parseProgram :: Parser String
         parseProgram = do
