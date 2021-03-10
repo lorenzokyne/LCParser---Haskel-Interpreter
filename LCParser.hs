@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-missing-methods #-}
 module LC(
     module LC
 ) where
@@ -298,6 +297,11 @@ module LC(
                                 b<-parseProgram
                                 symbol "endif"
                                 return a 
+                                <|>
+                                do 
+                                a<-program
+                                symbol "endif"
+                                return a 
                         else 
                                 do
                                 a<-parseProgram
@@ -305,6 +309,12 @@ module LC(
                                 b<-program
                                 symbol "endif"
                                 return b
+                                <|>
+                                do
+                                a<-parseProgram
+                                symbol "endif"
+                                return "" 
+                                
 
         -- while :: Parser String
         -- while = do 
@@ -457,6 +467,14 @@ module LC(
                 b <- parseProgram
                 symbol "endif"
                 return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++ " endif")
+                <|>
+                do
+                symbol "if"
+                condition <- parseBexprAND
+                symbol "then"
+                a <- parseProgram
+                symbol "endif"
+                return ("if " ++ condition ++ " then " ++ a ++ " endif")
 
         parseCmd :: Parser String
         parseCmd = do
