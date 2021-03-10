@@ -39,13 +39,16 @@ module Lorenzo(
                                                     else [head xs] ++ modifyEnv (tail xs) varName varType varValue
         
         --get the value of a named var in the environment
-        getVariable :: Char -> Parser String
-        getVariable varname = P(\env inp -> [(env,snd (getVariable2 env varname),inp)])
+        getVariableValue :: Char -> Parser String
+        getVariableValue varname = P(\env inp -> [(env,snd (getVariable env varname),inp)])
 
+        --get the value of a named var in the environment
+        getVariableType :: Char -> Parser String
+        getVariableType varname = P(\env inp -> [(env,fst (getVariable env varname),inp)])
 
-        getVariable2 :: Environment -> Char -> (String,String)
-        getVariable2 [] _ = ("","")
-        getVariable2 env varname =  if getName (head env) == varname then (getType (head env),getValue (head env)) else getVariable2 (tail env) varname  
+        getVariable :: Environment -> Char -> (String,String)
+        getVariable [] _ = ("","")
+        getVariable env varname =  if getName (head env) == varname then (getType (head env),getValue (head env)) else getVariable (tail env) varname  
 
         instance Functor Parser where
                 -- fmap :: (a -> b) -> Parser a -> Parser b
@@ -140,7 +143,7 @@ module Lorenzo(
                 id <- identifier
                 symbol "="
                 e <- expr
-                updateEnv id "intero" (show e)
+                updateEnv id intType (show e)
                 symbol ";"
                 return (show e)
                 <|>
@@ -148,7 +151,7 @@ module Lorenzo(
                         id <- identifier
                         symbol "="
                         b <- bexprAND
-                        updateEnv id "booleano" (show b)
+                        updateEnv id boolType (show b)
                         symbol ";"
                         return (show b)
 
@@ -177,23 +180,33 @@ module Lorenzo(
         comment :: Parser ()
         comment = string "--" >>= \c -> many (sat isAlphaNum) >>= \i -> string "\n" >>= \end -> return ()
 
-        
-
-
         symbol :: String -> Parser String
         symbol xs = token (string xs)
 
-        factor :: Parser Int
-        factor =
+        compareTo :: Parser Bool 
+        compareTo = do
+                left <- expr
+                symbol "<"
+                right <- expr
+                return (left < right)
+                <|>
                 do
-                        d <- int
-                        return d
-                        <|>
-                        do
-                                symbol "("
-                                e <- expr
-                                symbol ")"
-                                return e
+                left <- expr
+                symbol ">"
+                right <- expr
+                return (left > right)
+                <|>
+                do
+                left <- expr
+                symbol "=="
+                right <- expr
+                return (left == right)
+                <|>
+                do
+                left <- expr
+                symbol "<>"
+                right <- expr
+                return (left /= right)
 
         bexpr :: Parser Bool
         bexpr = do 
@@ -210,12 +223,15 @@ module Lorenzo(
                         symbol ")"
                         return b
                         <|>
+                        compareTo
+                        <|>
                                 do
                                 space
                                 id <- identifier
                                 space
-                                value <- getVariable id
-                                if value == "True" then return True else return False
+                                value <- getVariableValue id
+                                if value == "" then failure else
+                                        if (value == "True" || value /= "0") then return True else return False
 
         bexprAND :: Parser Bool
         bexprAND =do
@@ -271,6 +287,29 @@ module Lorenzo(
                         <|> do
                                 symbol "/" >>= \c -> term >>= \t -> return (f `div`  t)
                                 <|> return f
+
+        factor :: Parser Int
+        factor =
+                do
+                        d <- int
+                        return d
+                        <|>
+                        do
+                                symbol "("
+                                e <- expr
+                                symbol ")"
+                                return e
+                                <|>
+                                do
+                                space
+                                id <- identifier
+                                space
+                                vartype <- getVariableType id
+                                if vartype == intType then 
+                                        do
+                                        value <- getVariableValue id
+                                        return (read value) 
+                                else failure
         cmd = assignment
                 <|>
                 ifThenElse
@@ -341,6 +380,14 @@ module Lorenzo(
                                         e <- parseExpr
                                         symbol ")"
                                         return e
+                                        <|>
+                                        do
+                                        space
+                                        id <- identifier
+                                        space
+                                        vartype <- getVariableType id
+                                        if vartype == intType then return [id]
+                                        else failure
         parseTerm :: Parser String
         parseTerm = do
                         parseFactor >>= \f ->
@@ -396,9 +443,36 @@ module Lorenzo(
                         symbol ")"
                         return ("(" ++ b ++ ")")
                         <|>
+                        parseCompareTo
+                        <|>
                                 do
                                 id <- identifier
                                 return [id]
+
+        parseCompareTo :: Parser String 
+        parseCompareTo = do
+                left <- parseExpr
+                symbol "<"
+                right <- parseExpr
+                return (left ++ "<" ++ right)
+                <|>
+                do
+                left <- parseExpr
+                symbol ">"
+                right <- parseExpr
+                return (left ++ ">" ++ right)
+                <|>
+                do
+                left <- parseExpr
+                symbol "=="
+                right <- parseExpr
+                return (left ++ "==" ++ right)
+                <|>
+                do
+                left <- parseExpr
+                symbol "<>"
+                right <- parseExpr
+                return (left ++ "/=" ++ right)
 
         parseAssignment :: Parser String
         parseAssignment = do
@@ -412,7 +486,7 @@ module Lorenzo(
                         id <- identifier
                         symbol "="
                         b <- parseBexprAND
-                        updateEnv id "booleano" (show b)
+                        updateEnv id boolType (show b)
                         return ([id] ++ "=" ++ b ++ ";")
         
         parseIfThenElse :: Parser String            
