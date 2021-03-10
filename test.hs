@@ -291,8 +291,7 @@ module Lorenzo(
         factor :: Parser Int
         factor =
                 do
-                        d <- int
-                        return d
+                        int
                         <|>
                         do
                                 symbol "("
@@ -310,6 +309,8 @@ module Lorenzo(
                                         value <- getVariableValue id
                                         return (read value) 
                                 else failure
+        
+        cmd :: Parser String
         cmd = assignment
                 <|>
                 ifThenElse
@@ -330,12 +331,14 @@ module Lorenzo(
                                 a<-program
                                 symbol "else"
                                 b<-parseProgram
+                                symbol "endif"
                                 return a 
                         else 
                                 do
                                 a<-parseProgram
                                 symbol "else"
                                 b<-program
+                                symbol "endif"
                                 return b
 
         --temp = do symbol "if"; condition <- bexprAND; return condition
@@ -497,13 +500,21 @@ module Lorenzo(
                 a <- parseProgram
                 symbol "else"
                 b <- parseProgram
-                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b)
+                symbol "endif"
+                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++ "endif")
 
-        parseProgram :: Parser String
-        parseProgram = do
+        parseCmd :: Parser String
+        parseCmd = do
                 parseAssignment
                 <|>
                 parseIfThenElse
+        
+        parseProgram :: Parser String
+        parseProgram = do
+                parseCmd
+                parseProgram
+                <|>
+                parseCmd
         
         
 ----------------------------------------------------------
