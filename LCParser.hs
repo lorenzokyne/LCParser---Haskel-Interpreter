@@ -1,21 +1,19 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
-module Lorenzo(
-    module Lorenzo
+module LC(
+    module LC
 ) where
         import Control.Applicative
         import Data.Char(isSpace, digitToInt, isAlphaNum, isLetter, intToDigit)
-        a :: Float
-        a = 5
 
         newtype Parser a = P(Environment->  String -> [(Environment,a,String)])
-        
+        ---CONSTANTS
+        boolType = "Boolean"
+        intType = "Integer"
+        ------------        
         --environment is composed of three string:
         --Variable name
         --Variable type
         --Variable value
-
-        boolType = "Boolean"
-        intType = "Integer"
         type Environment = [(Char, String, String)]
 
         getName :: (Char, String, String) -> Char
@@ -27,25 +25,26 @@ module Lorenzo(
         getValue :: (Char, String, String) -> String
         getValue (_,_,value) = value
 
-        updateEnv :: Char -> String -> String -> Parser String
-        updateEnv varName varType varValue = 
+        changeEnvironment :: Char -> String -> String -> Parser String
+        changeEnvironment varName varType varValue = 
                  P(\env inp -> case inp of
-                        xs -> [(modifyEnv env varName varType varValue,"",xs)])
+                        xs -> [(modifyEnvironment env varName varType varValue,"",xs)])
 
-        modifyEnv :: Environment -> Char -> String -> String -> Environment
-        modifyEnv [] varName varType varValue = [(varName,varType,varValue)]
-        modifyEnv xs varName varType varValue = if getName (head xs) == varName
+        modifyEnvironment :: Environment -> Char -> String -> String -> Environment
+        modifyEnvironment [] varName varType varValue = [(varName,varType,varValue)]
+        modifyEnvironment xs varName varType varValue = if getName (head xs) == varName
                                                         then [(varName,varType,varValue)] ++ tail xs
-                                                    else [head xs] ++ modifyEnv (tail xs) varName varType varValue
+                                                    else [head xs] ++ modifyEnvironment (tail xs) varName varType varValue
         
         --get the value of a named var in the environment
         getVariableValue :: Char -> Parser String
         getVariableValue varname = P(\env inp -> [(env,snd (getVariable env varname),inp)])
 
-        --get the value of a named var in the environment
+        --get the type of a named var in the environment
         getVariableType :: Char -> Parser String
         getVariableType varname = P(\env inp -> [(env,fst (getVariable env varname),inp)])
-
+        
+        --get the value and type of a named var in the environment
         getVariable :: Environment -> Char -> (String,String)
         getVariable [] _ = ("","")
         getVariable env varname =  if getName (head env) == varname then (getType (head env),getValue (head env)) else getVariable (tail env) varname  
@@ -56,7 +55,6 @@ module Lorenzo(
                                 [] -> []
                                 [(env, v, out)] -> [(env, g v, out)]
                          )
-
 
         instance Applicative Parser where
         -- pure :: a -> Parser a
@@ -93,26 +91,9 @@ module Lorenzo(
         failure :: Parser a
         failure  = P(\env inp -> [])
 
-        -- return  :: a -> Parser a
-        -- return v = P(\inp -> [(v,inp)])
-
-        --     (+++)  :: Parser a -> Parser a -> Parser a
-        --     p1 +++ q1 = P(\inp -> case p1 inp) of
-        --                    []        -> parse q1 inp
-        --                    [(v,out)] -> [(v,out)])
-
         parse :: Parser a -> Environment -> String -> [(Environment,a,String)]
         parse (P p) env inp = p env inp
 
-        -- sequencing
-        --     (>>=) :: Parser a -> (a -> Parser b) -> Parser b
-        --     p >>= f = \inp -> case (parse p inp) of
-        --         [] -> []
-        --         [(v,out)] -> parse (f v) out
-        -- p :: Parser (Char,Char)
-        -- p  = do x <- item
-        --         ;y <- item
-        --         ;Prelude.return (x,y)
         sat  :: (Char -> Bool) -> Parser Char
         sat p = item >>= \x -> if p x then return x else failure
 
@@ -128,7 +109,6 @@ module Lorenzo(
         identifier :: Parser Char
         identifier = sat isLetter  
 
-        --uasge parse (char 'x') "cdxiao"
         nat :: Parser Int
         nat = some digit >>= \xs -> return (read xs)
 
@@ -143,7 +123,7 @@ module Lorenzo(
                 id <- identifier
                 symbol "="
                 e <- expr
-                updateEnv id intType (show e)
+                changeEnvironment id intType (show e)
                 symbol ";"
                 return (show e)
                 <|>
@@ -151,12 +131,12 @@ module Lorenzo(
                         id <- identifier
                         symbol "="
                         b <- bexprAND
-                        updateEnv id boolType (show b)
+                        changeEnvironment id boolType (show b)
                         symbol ";"
                         return (show b)
 
         --     many2  :: Parser a -> Parser [a]
-        --     many2 p = many1 p Lorenzo.+++ return []
+        --     many2 p = many1 p LC.+++ return []
 
         --     many1  :: Parser a -> Parser [a]
         --     many1 p = p >>= \x -> many2 p >>= \vs -> return (x:vs)
@@ -164,7 +144,7 @@ module Lorenzo(
         string :: String -> Parser String
         string []     = return []
         string (x:xs) = char x >>= \y -> string xs >>= \ys -> return (y:ys)
-        --usage parse (string "xcd") "xcdxiao"
+        --usage: parse (string "name") "name+ecc"
 
         space :: Parser ()
         space = many (sat isSpace) >>= \x -> return ()
@@ -251,21 +231,6 @@ module Lorenzo(
                         <|>
                         bexpr
 
-        -- bexpr :: Parser Bool 
-        -- bexpr = do
-        --                 b1 <- booleans
-        --                 symbol "AND"
-        --                 b2 <- booleans
-        --                 return (b1 && b2)
-        --                 <|>
-        --                 do
-        --                 b1 <- booleans
-        --                 symbol "OR"
-        --                 b2 <- booleans
-        --                 return (b1 || b2)
-        --                 <|>
-        --                 do booleans
-
         expr :: Parser Int
         expr = do
                 t <- term
@@ -341,13 +306,6 @@ module Lorenzo(
                                 symbol "endif"
                                 return b
 
-        --temp = do symbol "if"; condition <- bexprAND; return condition
-
-        --temp = do symbol "if"; condition <- bexprAND; symbol "then";return condition
-        temp = do symbol "if"; condition <- bexprAND; symbol "then";a<-assignment;return condition
-        parseTemp = do symbol "if";condition <- parseBexprAND; symbol "then";a<-assignment;return (condition++a);
-        
-        -- temp = do symbol "if"; condition <- bexprAND; return condition
         -- while :: Parser String
         -- while = do 
         --         symbol "while"
@@ -356,9 +314,6 @@ module Lorenzo(
         --                 assignment
         --                 while
         --                 else return ""
-
-        -- eval   :: String -> Int
-        -- eval xs = fst (head (parse expr xs))
 
         --------------------
         --PARSE-------------
@@ -489,7 +444,7 @@ module Lorenzo(
                         id <- identifier
                         symbol "="
                         b <- parseBexprAND
-                        updateEnv id boolType (show b)
+                        changeEnvironment id boolType (show b)
                         return ([id] ++ "=" ++ b ++ ";")
         
         parseIfThenElse :: Parser String            
@@ -501,7 +456,7 @@ module Lorenzo(
                 symbol "else"
                 b <- parseProgram
                 symbol "endif"
-                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++ "endif")
+                return ("if " ++ condition ++ " then " ++ a ++ " else " ++ b ++ " endif")
 
         parseCmd :: Parser String
         parseCmd = do
