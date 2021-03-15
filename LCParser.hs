@@ -454,7 +454,7 @@ module LC(
                         id <- identifier
                         symbol "="
                         b <- parseBexprAND
-                        changeEnvironment id boolType (show b)
+                        symbol ";"
                         return ([id] ++ "=" ++ b ++ ";")
         
         parseIfThenElse :: Parser String            
