@@ -122,16 +122,16 @@ module LC(
                 id <- identifier
                 symbol "="
                 e <- expr
-                changeEnvironment id intType (show e)
                 symbol ";"
+                changeEnvironment id intType (show e)
                 return (show e)
                 <|>
                 do
                         id <- identifier
                         symbol "="
                         b <- bexprAND
-                        changeEnvironment id boolType (show b)
                         symbol ";"
+                        changeEnvironment id boolType (show b)
                         return (show b)
 
         --     many2  :: Parser a -> Parser [a]
@@ -198,11 +198,16 @@ module LC(
                 <|>
                 do
                         symbol "("
-                        b <-bexprAND
+                        b <-bexprOR
                         symbol ")"
                         return b
                         <|>
                         compareTo
+                        <|>
+                        do
+                        symbol "NOT"
+                        b<-bexprOR
+                        return (not b)
                         <|>
                                 do
                                 space
@@ -214,21 +219,21 @@ module LC(
 
         bexprAND :: Parser Bool
         bexprAND =do
-                        b1 <- bexprOR
+                        b1 <- bexpr
                         symbol "AND"
                         b2 <- bexprAND
                         return (b1 && b2)
                         <|>
-                        bexprOR
+                        bexpr
 
         bexprOR :: Parser Bool
         bexprOR =do
-                        b1 <- bexpr
+                        b1 <- bexprAND
                         symbol "OR"
                         b2 <- bexprOR
                         return (b1 || b2)
                         <|>
-                        bexpr
+                        bexprAND
 
         expr :: Parser Int
         expr = do
@@ -278,6 +283,8 @@ module LC(
         cmd = assignment
                 <|>
                 ifThenElse
+                <|>
+                while
 
         program :: Parser String
         program = do
@@ -289,7 +296,7 @@ module LC(
         ifThenElse :: Parser String
         ifThenElse = do
                         symbol "if"
-                        condition <- bexprAND
+                        condition <- bexprOR
                         symbol "then"
                         if condition then do 
                                 a<-program
@@ -315,15 +322,25 @@ module LC(
                                 symbol "endif"
                                 return "" 
                                 
+        duplicateWhile :: String -> Parser String 
+        duplicateWhile c = P(\env inp -> [(env,"",c ++ " " ++ inp)])
 
-        -- while :: Parser String
-        -- while = do 
-        --         symbol "while"
-        --         condition <- bexprAND
-        --         if condition then do
-        --                 assignment
-        --                 while
-        --                 else return ""
+        while :: Parser String
+        while = do 
+                whileString <- parseWhile
+                duplicateWhile whileString
+                symbol "while"
+                condition <- bexprOR
+                symbol "do"
+                if condition then do
+                        program
+                        symbol "endWhile"
+                        duplicateWhile whileString
+                        while
+                else do
+                        parseProgram
+                        symbol "endWhile"
+                        return ""
 
         --------------------
         --PARSE-------------
@@ -380,22 +397,23 @@ module LC(
                                 
         parseBexprAND :: Parser String
         parseBexprAND = do
-                        b1 <- parseBexprOR
-                        symbol "OR"
-                        b2 <- parseBexprAND
-                        return (b1 ++ "OR" ++ b2)
-                        <|>
-                        parseBexprOR
-
-        parseBexprOR :: Parser String
-        parseBexprOR = do
                         b1 <- parseBexpr
                         symbol "AND"
-                        b2 <- parseBexprOR
+                        b2 <- parseBexprAND
                         return (b1 ++ "AND" ++ b2)
                         <|>
                         parseBexpr
         
+        parseBexprOR :: Parser String
+        parseBexprOR = do
+                        b1 <- parseBexprAND
+                        symbol "OR"
+                        b2 <- parseBexprOR
+                        return (b1 ++ "OR" ++ b2)
+                        <|>
+                        parseBexprAND
+
+
         parseBexpr :: Parser String
         parseBexpr = do 
                 symbol "True"
@@ -407,15 +425,20 @@ module LC(
                 <|>
                 do
                         symbol "("
-                        b <-parseBexprAND
+                        b <-parseBexprOR
                         symbol ")"
                         return ("(" ++ b ++ ")")
                         <|>
                         parseCompareTo
                         <|>
-                                do
-                                id <- identifier
-                                return [id]
+                        do
+                                symbol "NOT"
+                                b<-parseBexprOR
+                                return ("NOT " ++ b)
+                                <|>
+                                        do
+                                        id <- identifier
+                                        return [id]
 
         parseCompareTo :: Parser String 
         parseCompareTo = do
@@ -488,7 +511,15 @@ module LC(
                 parseProgram
                 <|>
                 parseCmd
-        
+
+        parseWhile = do
+                symbol "while"
+                c <- parseBexprOR 
+                symbol "do"
+                p <- parseProgram
+                symbol "endWhile"
+                return ("while " ++ c ++ " do " ++ p ++ " endWhile ")
+
         
 ----------------------------------------------------------
 
