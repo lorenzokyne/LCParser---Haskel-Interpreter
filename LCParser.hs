@@ -370,9 +370,7 @@ module LC(
                                         space
                                         id <- identifier
                                         space
-                                        vartype <- getVariableType id
-                                        if vartype == intType then return [id]
-                                        else failure
+                                        return [id]
         parseTerm :: Parser String
         parseTerm = do
                         parseFactor >>= \f ->
@@ -483,7 +481,7 @@ module LC(
         parseIfThenElse :: Parser String            
         parseIfThenElse = do
                 symbol "if"
-                condition <- parseBexprAND
+                condition <- parseBexprOR
                 symbol "then"
                 a <- parseProgram
                 symbol "else"
@@ -493,7 +491,7 @@ module LC(
                 <|>
                 do
                 symbol "if"
-                condition <- parseBexprAND
+                condition <- parseBexprOR
                 symbol "then"
                 a <- parseProgram
                 symbol "endif"
@@ -504,11 +502,14 @@ module LC(
                 parseAssignment
                 <|>
                 parseIfThenElse
+                <|>
+                parseWhile
         
         parseProgram :: Parser String
         parseProgram = do
-                parseCmd
-                parseProgram
+                cmd<-parseCmd
+                progr<-parseProgram
+                return (cmd ++ progr)
                 <|>
                 parseCmd
 
@@ -521,7 +522,26 @@ module LC(
                 return ("while " ++ c ++ " do " ++ p ++ " endWhile ")
 
         
-----------------------------------------------------------
+-----------------------------------------------------------
+------------------------Interpreter------------------------
+
+        programMemory :: [(Environment,String,String)] -> String
+        programMemory [] = ""
+        programMemory [([],_,_)] = ""
+        programMemory [(env,inputString,outputString)] = "Variable name: " ++ [getName (head env)] ++ " - Variable value: " ++ getValue (head env) ++ "\n" ++ programMemory [((tail env),inputString,outputString)]
+        
+        executeProgram :: [(Environment,String,String)] -> String
+        executeProgram [] = "Invalid program\n"
+        executeProgram [(env,inputString,"")] = "\nParsed program: " ++ inputString ++"\n\n" ++ programMemory (parse program [] inputString)
+        executeProgram [(env,inputString,x)] = "Error: " ++ x
+
+        main = do
+                putStrLn "Enter the program to parse or type 'quit'"
+                input <- getLine
+                if input == "quit" then return "Thanks for using LCParser!" else do
+                        putStrLn (executeProgram (parse parseProgram [] input))
+                        main
+-----------------------------------------------------------
 
         test :: Parser Int
         test = char '1' >>= \c -> return (read [c])
