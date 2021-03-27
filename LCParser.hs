@@ -54,7 +54,7 @@ module LC(
                                 [] -> []
                                 [(env, v, out)] -> [(env, g v, out)]
                          )
-
+                         
         instance Applicative Parser where
         -- pure :: a -> Parser a
                 pure v = P (\env inp -> [(env,v,inp)])
@@ -95,7 +95,7 @@ module LC(
 
         sat  :: (Char -> Bool) -> Parser Char
         sat p = item >>= \x -> if p x then return x else failure
-
+        
         isDigit :: Char -> Bool
         isDigit c = c >= '0' && c <= '9'
 
@@ -156,8 +156,8 @@ module LC(
                 return v
         
         --Parse a line of comment string and return the remaining string 
-        comment :: Parser ()
-        comment = string "--" >>= \c -> many (sat isAlphaNum) >>= \i -> string "\n" >>= \end -> return ()
+        comment :: Parser String
+        comment = string "--" >>= \c -> many (sat isAlphaNum) >>= \i -> string "/--" >>= \end -> return ""
 
         symbol :: String -> Parser String
         symbol xs = token (string xs)
@@ -215,7 +215,7 @@ module LC(
                                 space
                                 value <- getVariableValue id
                                 if value == "" then failure else
-                                        if (value == "True" || value /= "0") then return True else return False
+                                        if (value == "True" || (value/="False" && value /= "0")) then return True else return False
 
         bexprAND :: Parser Bool
         bexprAND =do
@@ -256,6 +256,20 @@ module LC(
                         <|> do
                                 symbol "/" >>= \c -> term >>= \t -> return (f `div`  t)
                                 <|> return f
+        --equivalent to above but with different syntax
+        -- term :: Parser Int
+        -- term = do
+        --         f <- factor
+        --         do
+        --         symbol "*" 
+        --         t <- term 
+        --         return (f * t)
+        --         <|> do
+        --                 symbol "/" 
+        --                 t <- term 
+        --                 return (f `div` t)
+        --                 <|> 
+        --                 return f                        
 
         factor :: Parser Int
         factor =
@@ -278,13 +292,15 @@ module LC(
                                         value <- getVariableValue id
                                         return (read value) 
                                 else failure
-        
+
         cmd :: Parser String
         cmd = assignment
                 <|>
                 ifThenElse
                 <|>
                 while
+                <|>
+                comment
 
         program :: Parser String
         program = do
@@ -504,7 +520,9 @@ module LC(
                 parseIfThenElse
                 <|>
                 parseWhile
-        
+                <|>
+                parseComment
+
         parseProgram :: Parser String
         parseProgram = do
                 cmd<-parseCmd
@@ -521,30 +539,44 @@ module LC(
                 symbol "endWhile"
                 return ("while " ++ c ++ " do " ++ p ++ " endWhile ")
 
-        
+        parseComment = do
+                string "--" 
+                i <- many (sat isAlphaNum) 
+                string "/--"
+                return ("--" ++ i ++ "/--")
 -----------------------------------------------------------
 ------------------------Interpreter------------------------
 
         programMemory :: [(Environment,String,String)] -> String
         programMemory [] = ""
         programMemory [([],_,_)] = ""
-        programMemory [(env,inputString,outputString)] = "Variable name: " ++ [getName (head env)] ++ " - Variable value: " ++ getValue (head env) ++ "\n" ++ programMemory [((tail env),inputString,outputString)]
+        programMemory [(env,inputString,"")] = "Variable name: " ++ [getName (head env)] ++ " - Variable value: " ++ getValue (head env) ++ "\n" ++ programMemory [((tail env),inputString,"")]
+        programMemory [(env,inputString,outputString)] =  "\x1b[31m" ++ "Error occurred -> "++outputString ++"\x1b[0m\n"
         
         executeProgram :: [(Environment,String,String)] -> String
         executeProgram [] = "Invalid program\n"
-        executeProgram [(env,inputString,"")] = "\nParsed program: " ++ inputString ++"\n\n" ++ programMemory (parse program [] inputString)
-        executeProgram [(env,inputString,x)] = "Error: " ++ x
+        executeProgram [(env,inputString,"")] = "\nParsed program:\n" ++ inputString ++"\n\nMemory:\n" ++ programMemory (parse program [] inputString)
+        executeProgram [(env,inputString,x)] = "\x1b[31m" ++ "Error: " ++ x ++"\x1b[0m\n"
 
-        main = do
+        showHeader = do
+                putStrLn ("\x1b[32m" ++"██╗      ██████╗██████╗  █████╗ ██████╗ ███████╗███████╗██████╗")
+                putStrLn ("\x1b[32m" ++"██║     ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗")
+                putStrLn ("\x1b[0m"++  "██║     ██║     ██████╔╝███████║██████╔╝███████╗█████╗  ██████╔╝")
+                putStrLn ("\x1b[0m"++  "██║     ██║     ██╔═══╝ ██╔══██║██╔══██╗╚════██║██╔══╝  ██╔══██╗")
+                putStrLn ("\x1b[31m" ++"███████╗╚██████╗██║     ██║  ██║██║  ██║███████║███████╗██║  ██║")
+                putStrLn ("\x1b[31m" ++"╚══════╝ ╚═════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝"++"\x1b[0m")
+
+        executeInterpreter =do
                 putStrLn "Enter the program to parse or type 'quit'"
                 input <- getLine
                 if input == "quit" then return "Thanks for using LCParser!" else do
                         putStrLn (executeProgram (parse parseProgram [] input))
-                        main
------------------------------------------------------------
+                        executeInterpreter                                                     
 
-        test :: Parser Int
-        test = char '1' >>= \c -> return (read [c])
+        main = do
+                showHeader
+                executeInterpreter
+-----------------------------------------------------------
 
         moltiplica :: Int -> Int-> Int
         moltiplica _ 0 = 0
